@@ -5,7 +5,7 @@ from machine import UART
 
 class RecvDataFromXmos:
 
-    def __init__(self, uart):
+    def __init__(self, uart, keepAlive=True):
         self._uart = uart
         
         self.xmos_active = False
@@ -42,7 +42,8 @@ class RecvDataFromXmos:
 
     def command_check_device_start(self, msg, timeout_duration=5000):
         start_msg = b'App build at'
-        end_msg = b'\\xff\\xff\\x7f\\xf8\\xff\\xe0'
+        #end_msg = b'\\xff\\xff\\x7f\\xf8\\xff\\xe0'
+        end_msg= b'\r\n\r\n'
 
         if start_msg in msg:
             print("Startup message detected, ignoring...")
@@ -52,8 +53,8 @@ class RecvDataFromXmos:
             while True:
                 if self._uart.any():
                     byte_sequence += self._uart.read()  # 디코드 제거
-                    #print(f"Processing: {byte_sequence}")
-                    if byte_sequence[-24:] == end_msg:
+                    print(f"Processing: {byte_sequence}")
+                    if byte_sequence[-len(end_msg):] == end_msg:
                         print("Detected special ending sequence. Stopping the loop.")
                         break
 
@@ -63,6 +64,27 @@ class RecvDataFromXmos:
                     break
             return True
         return False
+    
+    def command_check_hex_data (self, command_id):
+
+        start_time = time.ticks_ms()
+        timeout_duration= 2000
+        command_hex = b''
+
+        while True:
+            if self._uart.any():
+                command_hex= self._uart.read()
+                print(f"Hex data: {command_hex}")
+                if int(command_hex[0:]) == command_id:
+                    break
+                else:
+                    print(f"not matched hex data ({command_hex}:{commnad_id})")
+                    
+            elapsed_time = time.ticks_diff(time.ticks_ms(), start_time)
+            if elapsed_time > timeout_duration:
+                print("Timeout reached. Ending the loop without detecting end_msg.")
+                break
+        return
 
     def command_parsing(self, message):
         if message.strip() == b'.' or self.command_check_device_start(message):
@@ -80,7 +102,7 @@ class RecvDataFromXmos:
             energy = int(parts[4].split('=')[1])
 
             #print(f"Command: {command}, ID: {id}, Score: {score}, SG_Diff: {sg_diff}, Energy: {energy}")
-            
+            #self.command_check_hex_data(id)
             self.set_xmos_status_active()
 
         except Exception as e:
